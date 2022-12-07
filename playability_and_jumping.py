@@ -1,14 +1,7 @@
-"""
-Implements vanilla Bayesian Optimization (without constraints)
-in the latent space of our SMB VAEs. The objective function
-is the number of jumps thrown by the simulator (divided by ten).
-
-After running this, you can see the latent space queries at
-./data/plots/bayesian_optimization/vanilla_bo.
-"""
 from typing import Tuple
 from pathlib import Path
 from matplotlib import pyplot as plt
+from baseline_bayesian_optimization import run_experiment
 
 import torch as t
 
@@ -18,9 +11,10 @@ import gpytorch
 
 from botorch.models import SingleTaskGP
 from botorch.fit import fit_gpytorch_model
-from botorch.acquisition import ExpectedImprovement
+from acquisition import ExpectedImprovement
 
 from gpytorch.mlls import ExactMarginalLogLikelihood
+from general_functions import run_first_samples
 
 from simulator import test_level_from_int_tensor
 from vae import VAEMario
@@ -31,51 +25,15 @@ ROOT_DIR = Path(__file__).parent.resolve()
 
 gpytorch.settings.cholesky_jitter(float=1e-3, double=1e-4)
 
-
-def run_first_samples(
-    vae: VAEMario,
-    n_samples: int = 2,
-    visualize: bool = False,
-) -> Tuple[t.Tensor, t.Tensor, t.Tensor]:
-    """
-    Runs the simulator on {n_samples} levels selected uniformly
-    at random from the latent space (considered to be bounded in
-    the [-5, 5]^2 square). Returns the latent codes, jumps and
-    playabilities (a binary value stating whether the level was
-    solved or not).
-    """
-    latent_codes = Uniform(t.Tensor([-5.0, -5.0]), t.Tensor([5.0, 5.0])).sample(
-        (n_samples,)
-    )
-    levels = vae.decode(latent_codes).probs.argmax(dim=-1)
-
-    playability = []
-    jumps = []
-    for i, level in enumerate(levels):
-        results = test_level_from_int_tensor(level, visualize=visualize)
-        playability.append(results["marioStatus"])
-        jumps.append(results["jumpActionsPerformed"])
-        print(
-            "i:",
-            i,
-            "p:",
-            results["marioStatus"],
-            "jumps:",
-            results["jumpActionsPerformed"],
-        )
-
-    # Returning.
-    return latent_codes, t.Tensor(playability), t.Tensor(jumps)
-
-
-def bayesian_optimization_iteration(
+def bayesian_optimization_iteration_playability_and_jump(
     latent_codes: t.Tensor,
     jumps: t.Tensor,
+    playabilities: t.Tensor,
     iteration: int = 0,
     plot_latent_space: bool = False,
     img_save_folder: Path = None,
     visualize: bool = False,
-) -> Tuple[t.Tensor, t.Tensor, t.Tensor]:
+) -> Tuple[t.Tensor, t.Tensor, t.Tensor, t.Tensor]:
     """
     Runs a B.O. iteration and returns the next candidate and its value.
     """
@@ -88,9 +46,15 @@ def bayesian_optimization_iteration(
     model = SingleTaskGP(latent_codes, (jumps / 10.0), covar_module=kernel)
     mll = ExactMarginalLogLikelihood(model.likelihood, model)
     fit_gpytorch_model(mll)
-
     model.eval()
     acq_function = ExpectedImprovement(model, (jumps / 10.0).max())
+
+    c_kernel = gpytorch.kernels.MaternKernel()
+    c_model = SingleTaskGP(latent_codes, playabilities, covar_module=c_kernel)
+    c_mll = ExactMarginalLogLikelihood(c_model.likelihood, c_model)
+    fit_gpytorch_model(c_mll)
+    c_model.eval()
+    c_acq_function = ExpectedImprovement(c_model, playabilities.max())
 
     # Optimizing the acq. function by hand on a discrete grid.
     zs = t.Tensor(
@@ -101,17 +65,20 @@ def bayesian_optimization_iteration(
         ]
     )
     acq_values = acq_function(zs.unsqueeze(1))
-    candidate = zs[acq_values.argmax()]
+    c_acq_values = c_acq_function(zs.unsqueeze(1))
+    c_acq_values_norm = (c_acq_values - c_acq_values.min()) / (c_acq_values.max() - c_acq_values.min())
+    tot_acq_values = t.mul(acq_values,c_acq_values_norm)
+    candidate = zs[tot_acq_values.argmax()]
+    predicted_playability_probability = c_acq_values_norm[tot_acq_values.argmax()]
 
-    print(candidate, acq_values[acq_values.argmax()])
     level = vae.decode(candidate).probs.argmax(dim=-1)
-    print(level)
+    #print(level)
     results = test_level_from_int_tensor(level[0], visualize=visualize)
 
     if plot_latent_space:
         fig, (ax, ax_acq) = plt.subplots(1, 2)
-        plot_prediction(model, ax)
-        plot_acquisition(acq_function, ax_acq)
+        plot_prediction(c_model, ax)
+        plot_acquisition(c_acq_function, ax_acq)
 
         ax.scatter(
             latent_codes[:, 0].cpu().detach().numpy(),
@@ -150,10 +117,11 @@ def bayesian_optimization_iteration(
         candidate,
         t.Tensor([[results["marioStatus"]]]),
         t.Tensor([[results["jumpActionsPerformed"]]]),
+        predicted_playability_probability
     )
 
 
-def run_experiment(n_iterations: int = 50, visualize: bool = False):
+def run_experiment_playability_and_jump(n_iterations: int = 50, visualize: bool = False):
     # Load the model
     vae = VAEMario()
     vae.load_state_dict(t.load("./models/example.pt"))
@@ -161,42 +129,32 @@ def run_experiment(n_iterations: int = 50, visualize: bool = False):
 
     # Get some first samples and save them.
     latent_codes, playabilities, jumps = run_first_samples(
-        vae, n_samples=2, visualize=visualize
+        vae, n_samples=10, visualize=visualize
     )
-    jumps = jumps.type(t.float32).unsqueeze(1)
-    playabilities = playabilities.unsqueeze(1)
-
-    # To disencourage exploiting unplayable levels,
-    # I mask the non-playable ones with 0 jumps.
-    # This is a hack, though.
-    jumps[playabilities == 0.0] = 0.0
+    jumps = jumps.type(t.float64).unsqueeze(1)
+    playabilities = playabilities.unsqueeze(1).type(t.float64)
+    playability_probability_predictions = playabilities
 
     # The path to save the images in.
     img_save_folder = (
-        ROOT_DIR / "data" / "plots" / "bayesian_optimization" / "vanilla_bo"
+        ROOT_DIR / "data" / "plots" / "bayesian_optimization" / "playabilityAndJump"
     )
     img_save_folder.mkdir(exist_ok=True, parents=True)
 
     # The B.O. loops; they might hang because of numerical instabilities.
     for i in range(n_iterations):
-        candidate, playability, jump = bayesian_optimization_iteration(
+        candidate, playability, jump, playability_probability_prediction = bayesian_optimization_iteration_playability_and_jump(
             latent_codes,
             jumps,
+            playabilities,
             plot_latent_space=True,
             iteration=i,
             img_save_folder=img_save_folder,
             visualize=visualize,
         )
-        print(f"(Iteration {i+1}) tested {candidate} and got {jump} (p={playability})")
-
-        if playability == 0.0:
-            jump = t.zeros_like(jump)
-
+        print(f"(Iteration {i+1}) tested {candidate} and got {jump.item()} jumps (p_pred={playability_probability_prediction}, p={playability})")
         latent_codes = t.vstack((latent_codes, candidate))
         jumps = t.vstack((jumps, jump))
         playabilities = t.vstack((playabilities, playability))
+        playability_probability_predictions = t.vstack((playability_probability_predictions,playability_probability_prediction))
 
-
-if __name__ == "__main__":
-    # visualize == seeing the agent playing on screen.
-    run_experiment(visualize=True)

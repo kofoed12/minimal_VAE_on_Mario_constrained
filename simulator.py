@@ -39,7 +39,7 @@ def test_level_from_decoded_tensor(
 def test_level_from_int_tensor(
     level: Tensor,
     human_player: bool = False,
-    max_time: int = 45,
+    max_time: int = 30,
     visualize: bool = False,
 ) -> dict:
     level = clean_level(level.detach().numpy())
@@ -53,7 +53,7 @@ def test_level_from_int_tensor(
 def test_level_from_int_array(
     level: np.ndarray,
     human_player: bool = False,
-    max_time: int = 45,
+    max_time: int = 30,
     visualize: bool = False,
 ) -> dict:
     level = clean_level(level)

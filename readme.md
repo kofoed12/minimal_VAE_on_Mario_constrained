@@ -1,9 +1,25 @@
 This repo is forked from miguelgondu/minimal_VAE_on_Mario. See original readme further down.
 All files with commit message "final commit" are new additions.
-By running 
+All experiments can be run with various hyperparameters by running:
 ```
 python main.py
 ```
+after installing requirements as described in original readme.
+For the playability only model run:
+```
+python playabilityOnly.py
+```
+
+If you wish to run the final experiment of baseline, run:
+```
+python baseline_bayesian_optimization.py
+```
+For the final experiment of the playability constrained model, run:
+```
+python playability_and_jumping.py
+```
+To see the generated maps from the experiments look at `show_level.ipynb`
+
 
 Original readme:
 # A minimal example of a VAE for Mario

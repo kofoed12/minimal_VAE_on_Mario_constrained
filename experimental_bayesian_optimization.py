@@ -34,7 +34,7 @@ if __name__ == "__main__":
             else:
                 run_experiment_playability_only(visualize=visualize,n_iterations=n_iterations)
         elif sys.argv[1] == 'playAndJump':
-            run_experiment_playability_and_jump(visualize=visualize,n_iterations=n_iterations)
+            run_experiment_playability_and_jump(visualize=visualize,n_iterations=n_iterations, n_samples=10)
         else:
             run_experiment(visualize=visualize,n_iterations=n_iterations)
 

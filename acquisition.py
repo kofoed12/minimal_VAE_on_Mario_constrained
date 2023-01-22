@@ -126,6 +126,7 @@ class ExpectedImprovement(AnalyticAcquisitionFunction):
             A `(b1 x ... bk)`-dim tensor of Expected Improvement values at the
             given design points `X`.
         """
+        xi = 1
         self.best_f = self.best_f.to(X)
         posterior = self.model.posterior(
             X=X, posterior_transform=self.posterior_transform
@@ -135,7 +136,7 @@ class ExpectedImprovement(AnalyticAcquisitionFunction):
         view_shape = mean.shape[:-2] if mean.shape[-2] == 1 else mean.shape[:-1]
         mean = mean.view(view_shape)
         sigma = posterior.variance.clamp_min(1e-9).sqrt().view(view_shape)
-        u = (mean - self.best_f.expand_as(mean)) / sigma
+        u = (mean - self.best_f.expand_as(mean) - xi) / sigma
         if not self.maximize:
             u = -u
         normal = Normal(torch.zeros_like(u), torch.ones_like(u))

@@ -73,7 +73,7 @@ def plot_prediction(model: ExactGP, ax: plt.Axes):
 def plot_probability(probabilities, ax: plt.Axes):
     limits = [-5, 5]
     n_points_in_grid = 75
-
+    print("max prob", probabilities[probabilities.argmax()])
     acq_values_as_img = _image_from_values(probabilities, limits, n_points_in_grid)
 
     plot = ax.imshow(acq_values_as_img, extent=[*limits, *limits], cmap="Blues")

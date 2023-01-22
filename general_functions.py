@@ -25,16 +25,24 @@ def run_first_samples(
     playability = []
     jumps = []
     for i, level in enumerate(levels):
-        results = test_level_from_int_tensor(level, visualize=visualize)
-        playability.append(results["marioStatus"])
-        jumps.append(results["jumpActionsPerformed"])
+        playability_it = 0
+        jumps_it = 0
+        for j in range(10):
+            results = test_level_from_int_tensor(level, visualize=visualize)
+            playability_it += results["marioStatus"]
+            jumps_it += results["jumpActionsPerformed"]
+        if playability_it > 5:
+            playability.append(1)
+        else:
+            playability.append(0)
+        jumps.append(jumps_it/10.0)
         print(
             "i:",
             i,
             "p:",
-            results["marioStatus"],
+            playability_it,
             "jumps:",
-            results["jumpActionsPerformed"],
+            jumps_it/2.0,
         )
 
     # Returning.

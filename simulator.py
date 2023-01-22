@@ -4,6 +4,7 @@ This script will send things to simulator.jar.
 When ran, it lets a human play a level.
 """
 import subprocess
+import sys
 import json
 from pathlib import Path
 
@@ -111,14 +112,19 @@ def test_level_from_z(z: Tensor, vae: VAEMario, human_player: bool = False) -> d
     res = vae.decode(z.view(1, -1)).probs.argmax(dim=-1)
     level = res[0]
 
-    return test_level_from_decoded_tensor(level, human_player=human_player)
+    return test_level_from_decoded_tensor(level, human_player=human_player, visualize=True)
 
 
 if __name__ == "__main__":
     human_player = True
     vae = VAEMario()
     vae.load_state_dict(torch.load("./models/example.pt"))
-
+    print(sys.argv)
     random_z = 3.0 * torch.randn((2,))
+    if len(sys.argv) > 2:
+        random_z[0] = float(sys.argv[1])
+        random_z[1] = float(sys.argv[2])
+        human_player = False
+        print("random_z",random_z)
     res = test_level_from_z(random_z, vae, human_player=human_player)
     print(res)

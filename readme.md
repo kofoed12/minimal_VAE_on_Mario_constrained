@@ -1,6 +1,7 @@
 This repo is forked from miguelgondu/minimal_VAE_on_Mario. See original readme further down.
 All files with commit message "final commit" are new additions.
-By running ```
+By running 
+```
 python main.py
 ```
 

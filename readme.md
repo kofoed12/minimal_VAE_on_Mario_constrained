@@ -1,3 +1,10 @@
+This repo is forked from miguelgondu/minimal_VAE_on_Mario. See original readme further down.
+All files with commit message "final commit" are new additions.
+By running ```
+python main.py
+```
+
+Original readme:
 # A minimal example of a VAE for Mario
 
 This folder contains three scripts: `vae.py` implements a categorical VAE with MLP encoders and decoders, `train.py` trains it, and `visualize.py` shows a snapshot of the latent space.
